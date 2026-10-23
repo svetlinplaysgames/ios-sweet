@@ -2,12 +2,13 @@
  * Milestone 4: act as iBoot for xnu.
  *
  * mkpayload.py already resolved the kernel's chained fixups and built the
- * ADT, so this only has to: find the payload in the ABL ramdisk, copy the
+ * ADT, so this only has to: find the payload in the bootloader ramdisk, copy the
  * segments to phys_base + (vmaddr - virt_base), place the ADT and
  * boot_args behind the kernel, and jump to the entry point with the MMU
  * and caches off, x0 = boot_args (physical).
  */
 #include <stdint.h>
+#include "platform.h"
 #include "console.h"
 #include "fdt.h"
 #include "loader.h"
@@ -67,11 +68,16 @@ static void zero64(uintptr_t dst, uint64_t n)
 
 static int magic_ok(const char *m)
 {
-	static const char want[] = "SWEETXNU";
-	for (int i = 0; i < 8; i++)
-		if (m[i] != want[i])
-			return 0;
-	return 1;
+	static const char want1[] = "SWEETXNU";
+	static const char want2[] = "MT8788XN";
+	int ok1 = 1, ok2 = 1;
+	for (int i = 0; i < 8; i++) {
+		if (m[i] != want1[i])
+			ok1 = 0;
+		if (m[i] != want2[i])
+			ok2 = 0;
+	}
+	return ok1 || ok2;
 }
 
 typedef void (*xnu_entry_t)(uint64_t boot_args_pa);
@@ -87,7 +93,7 @@ const char *loader_boot(uintptr_t dtb)
 
 	const struct payload *p = (const struct payload *)rd_start;
 	if (!magic_ok(p->magic))
-		return "no SWEETXNU payload";
+		return "no recognized XNU payload magic";
 	if (p->version != 1 || (p->adt_off & 7) || (rd_start & 7))
 		return "bad payload header";
 

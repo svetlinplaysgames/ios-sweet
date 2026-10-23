@@ -4,14 +4,14 @@
  * T0SZ=28 gives a 36-bit VA whose walk starts at level 2: one 16K table of
  * 2048 x 32MB blocks covers 64GB, identity mapped (VA == PA).
  *
- * Qualcomm XPUs fault on speculative reads of protected carve-outs (TZ,
- * hyp, modem...), so nothing is mapped cacheable except our own image:
+ * Fault on speculative reads of protected carve-outs:
  *   - default: Device-nGnRnE, execute-never (same as MMU off)
  *   - the 32MB block(s) holding the image get an L3 table: image pages are
  *     Normal write-back, the rest of the block stays Device
  *   - the splash framebuffer block is Normal non-cacheable (write-combining)
  */
 #include <stdint.h>
+#include "platform.h"
 #include "mmu.h"
 
 #define PG_SHIFT	14
@@ -86,9 +86,9 @@ int mmu_enable(struct mmu_info *info)
 	if (((img_hi - 1) >> BLK_SHIFT) - (img_lo >> BLK_SHIFT) > 1)
 		return -1;	/* only room for two L3 tables */
 
-	/* L2: Device everywhere RAM or MMIO can be (first 8GB), rest unmapped */
+	/* L2: Device everywhere RAM or MMIO can be (cover up to 12GB for 8GB MT8788), rest unmapped */
 	zero_table(l2);
-	for (uint64_t i = 0; i < (8UL << 30) >> BLK_SHIFT; i++)
+	for (uint64_t i = 0; i < (12UL << 30) >> BLK_SHIFT; i++)
 		l2[i] = (i << BLK_SHIFT) | DEV_FLAGS | D_BLOCK;
 	l2[FB_PHYS >> BLK_SHIFT] = (FB_PHYS & ~(BLK_SIZE - 1)) | NC_FLAGS | D_BLOCK;
 
@@ -105,7 +105,7 @@ int mmu_enable(struct mmu_info *info)
 	}
 	info->n_l3 = n_l3;
 
-	/* Image lines may be stale in the cache from ABL; we wrote memory directly. */
+	/* Image lines may be stale in the cache from bootloader; we wrote memory directly. */
 	dcache_inval_range(img_lo, img_hi);
 	__asm__ volatile("ic iallu; dsb sy; isb" ::: "memory");
 

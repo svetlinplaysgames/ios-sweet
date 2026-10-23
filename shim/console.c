@@ -1,11 +1,16 @@
 /*
- * Minimal text console on the ABL splash framebuffer. With the MMU off
- * every access is Device memory, so stay aligned (-mstrict-align).
+ * Minimal text console on the bootloader splash framebuffer and early UART.
+ * With the MMU off every access is Device memory, so stay aligned (-mstrict-align).
  */
 #include "console.h"
 #include "font.h"
 
+#ifndef CON_SCALE
 #define SCALE		3
+#else
+#define SCALE		CON_SCALE
+#endif
+
 #define CH_W		(8 * SCALE)
 #define CH_H		(16 * SCALE)
 #define MARGIN		24
@@ -14,6 +19,29 @@
 volatile uint32_t *con_fb = (volatile uint32_t *)FB_BASE;
 static uint32_t con_bg;
 static int row;
+
+void uart_putc(char c)
+{
+#ifdef UART_BASE
+	/* 8250 / MediaTek UART: wait until Transmit Holding Register Empty */
+	while (!(*(volatile uint32_t *)UART_LSR & UART_LSR_THRE))
+		;
+	*(volatile uint32_t *)UART_THR = (uint32_t)(uint8_t)c;
+	if (c == '\n') {
+		while (!(*(volatile uint32_t *)UART_LSR & UART_LSR_THRE))
+			;
+		*(volatile uint32_t *)UART_THR = (uint32_t)'\r';
+	}
+#else
+	(void)c;
+#endif
+}
+
+void uart_puts(const char *s)
+{
+	while (*s)
+		uart_putc(*s++);
+}
 
 void con_clear(uint32_t bg)
 {
@@ -24,6 +52,7 @@ void con_clear(uint32_t bg)
 	}
 	con_bg = bg;
 	row = 0;
+	uart_puts("\n[CON CLEAR]\n");
 }
 
 static void put_char(int col, char ch, uint32_t fg)
@@ -64,6 +93,7 @@ static void fmt_hex(char *buf, uint64_t v, int digits)
 void con_skip(void)
 {
 	row++;
+	uart_putc('\n');
 }
 
 void con_str(const char *label, const char *s)
@@ -71,6 +101,11 @@ void con_str(const char *label, const char *s)
 	put_str(0, label, YELLOW);
 	put_str(LABEL_COLS, s, WHITE);
 	row++;
+
+	uart_puts(label);
+	uart_puts(": ");
+	uart_puts(s);
+	uart_putc('\n');
 }
 
 void con_hex(const char *label, uint64_t v)
@@ -88,10 +123,21 @@ void con_hex2(const char *label, const char *a, uint32_t va, const char *b, uint
 	col = put_str(col, a, YELLOW);
 	fmt_hex(buf, va, 8);
 	col = put_str(col, buf, WHITE);
+
+	uart_puts(label);
+	uart_puts(" ");
+	uart_puts(a);
+	uart_puts(buf);
+
 	if (b) {
 		col = put_str(col + 1, b, YELLOW);
 		fmt_hex(buf, vb, 8);
 		put_str(col, buf, WHITE);
+
+		uart_puts(" ");
+		uart_puts(b);
+		uart_puts(buf);
 	}
 	row++;
+	uart_putc('\n');
 }

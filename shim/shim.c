@@ -1,38 +1,15 @@
 /*
- * Milestone 2: one boot answers the questions that decide the XNU port.
- *   - CPU feature registers (16K granule, GIC sysreg interface)
- *   - PSCI/SMCCC version and which PSCI calls the Qualcomm TZ offers
- *   - SMP: PSCI CPU_ON for the 7 secondaries, each reports its MPIDR
- *   - GICv3 Group 1 IRQ from the virtual timer (INTID 19 on Qualcomm)
- * Any unexpected exception paints a blue panic screen.
+ * Unified Boot Shim for XNU Bring-up
+ * Supports:
+ *   - Xiaomi Redmi Note 10 Pro (Qualcomm Snapdragon 732G / SM7150 "sweet")
+ *   - Blackview BV5300 Plus (MediaTek MT8788V / MT6771)
  */
 #include <stdint.h>
+#include "platform.h"
 #include "console.h"
 #include "mmu.h"
 #include "loader.h"
 #include "ufs.h"
-
-#define IMEM_RESTART_REASON	0x146aa65cUL	/* qcom,msm-imem restart_reason@65c */
-#define RESTART_BOOTLOADER	0x77665500U
-#define PSHOLD			0x0c264000UL
-
-#define GICD_BASE		0x17a00000UL
-#define GICR_BASE		0x17a60000UL
-#define GICR_SIZE		0x100000UL
-#define GICR_PE_SIZE		0x20000UL
-#define GICR_TYPER		0x08
-#define GICR_WAKER		0x14
-#define GICR_SGI		0x10000
-#define GICR_IGROUPR0		(GICR_SGI + 0x080)
-#define GICR_ISENABLER0		(GICR_SGI + 0x100)
-#define GICR_ICENABLER0		(GICR_SGI + 0x180)
-#define GICR_IPRIORITYR		(GICR_SGI + 0x400)
-#define GICR_ISPENDR0		(GICR_SGI + 0x200)
-#define GICR_ISACTIVER0		(GICR_SGI + 0x300)
-#define GICR_ICFGR1		(GICR_SGI + 0xc04)
-#define VTIMER_INTID		19	/* DT: <GIC_PPI 3 ...>, not the usual 27 */
-#define PTIMER_INTID		18	/* DT: <GIC_PPI 2 ...> */
-#define SGI_INTID		1
 
 #define PSCI_VERSION		0x84000000UL
 #define PSCI_CPU_SUSPEND	0xc4000001UL
@@ -45,7 +22,16 @@
 #define PSCI_SYSTEM_RESET2	0xc4000012UL
 #define SMCCC_VERSION		0x80000000UL
 
-#define NR_CPUS			8
+#define GICR_TYPER		0x08
+#define GICR_WAKER		0x14
+#define GICR_SGI		0x10000
+#define GICR_IGROUPR0		(GICR_SGI + 0x080)
+#define GICR_ISENABLER0		(GICR_SGI + 0x100)
+#define GICR_ICENABLER0		(GICR_SGI + 0x180)
+#define GICR_IPRIORITYR		(GICR_SGI + 0x400)
+#define GICR_ISPENDR0		(GICR_SGI + 0x200)
+#define GICR_ISACTIVER0		(GICR_SGI + 0x300)
+#define GICR_ICFGR1		(GICR_SGI + 0xc04)
 
 #define rsr(r) ({ uint64_t _v; __asm__ volatile("mrs %0, " r : "=r"(_v)); _v; })
 #define wsr(r, v) __asm__ volatile("msr " r ", %0" : : "r"((uint64_t)(v)))
@@ -106,10 +92,23 @@ static void __attribute__((noreturn)) reset(unsigned after_s)
 	con_skip();
 	con_str("RESET", after_s > 20 ? "in 40s" : "in 20s");
 	delay_ms(after_s * 1000);
+
+#if defined(IMEM_RESTART_REASON)
 	wr32(IMEM_RESTART_REASON, RESTART_BOOTLOADER);
+#endif
+
+#if defined(MTK_WDT_BASE)
+	wr32(MTK_WDT_MODE, 0x22000000 | 1);
+	wr32(MTK_WDT_SWRST, MTK_WDT_SWRST_KEY);
+#endif
+
 	__asm__ volatile("dsb sy" ::: "memory");
 	smc(PSCI_SYSTEM_RESET, 0, 0, 0);
+
+#if defined(PSHOLD)
 	wr32(PSHOLD, 0);
+#endif
+
 	for (;;)
 		__asm__ volatile("wfe");
 }
@@ -165,6 +164,16 @@ void exc_handler(uint64_t slot, uint64_t *regs)
 
 static uintptr_t find_gicr(void);
 
+static inline uint64_t get_target_mpidr(int i)
+{
+#if defined(TARGET_BV5300PLUS) || defined(TARGET_MT8788)
+	/* MediaTek MT8788: 4x Cortex-A53 (cluster 0), 4x Cortex-A73 (cluster 1) */
+	return (i < 4) ? (uint64_t)i : (((uint64_t)1 << 8) | (i - 4));
+#else
+	return (uint64_t)i << 8;
+#endif
+}
+
 void secondary_main(uint64_t idx)
 {
 	sec_mpidr[idx] = rsr("mpidr_el1") | (1ULL << 63);
@@ -189,13 +198,16 @@ static void __attribute__((unused)) test_smp(void)
 	uint64_t self = rsr("mpidr_el1") & 0xffffff;
 	int64_t ret[NR_CPUS];
 
-	for (int i = 1; i < NR_CPUS; i++)
-		ret[i] = smc(PSCI_CPU_ON, (uint64_t)i << 8, (uintptr_t)secondary_entry, i);
+	for (int i = 1; i < NR_CPUS; i++) {
+		uint64_t target = get_target_mpidr(i);
+		ret[i] = smc(PSCI_CPU_ON, target, (uintptr_t)secondary_entry, i);
+	}
 	delay_ms(500);
 	for (int i = 1; i < NR_CPUS; i++) {
 		char label[] = "CPU0";
 		label[3] = '0' + i;
-		if (((uint64_t)i << 8) == self)
+		uint64_t target = get_target_mpidr(i);
+		if (target == self)
 			con_str(label, "is boot cpu");
 		else
 			con_hex2(label, "ret=", (uint32_t)ret[i], "mpidr=",
@@ -367,7 +379,7 @@ static uint64_t ticks_mem(void)
 
 static uint32_t to_us(uint64_t ticks)
 {
-	return ticks * 10 / 192;	/* 19.2 MHz */
+	return (uint32_t)(ticks / (TIMEBASE_FREQ / 1000000UL));
 }
 
 void shim_main(uint64_t dtb)
@@ -377,12 +389,14 @@ void shim_main(uint64_t dtb)
 	/* An xnu payload in the ramdisk means: boot it (MMU stays off). */
 	stage = "loader";
 	con_clear(RED);
-	con_str("SHIM", "sweet milestone 4: xnu loader");
+	con_str("SHIM", PLATFORM_NAME);
+	con_str("LOAD", "xnu stage-1 bootstrap");
 	con_skip();
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);
 	con_skip();
 
+#if HAS_UFS
 	/* No payload: probe the internal UFS while the MMU is still off. */
 	stage = "ufs";
 	test_ufs();
@@ -391,6 +405,11 @@ void shim_main(uint64_t dtb)
 	con_str("UFS", "probe done, reset in ~3 min");
 	delay_ms(180000);
 	reset(20);
+#else
+	stage = "emmc";
+	con_str("STORAGE", "eMMC 5.1 target (MSDC0) - ramdisk root recommended");
+	con_skip();
+#endif
 
 	stage = "fill off";
 	uint64_t fill_off = ticks_fill(RED);
@@ -405,7 +424,7 @@ void shim_main(uint64_t dtb)
 	if (rc)
 		con_clear(RED);
 
-	con_str("SHIM", "sweet milestone 3");
+	con_str("SHIM", "MMU & PSCI Diagnostics");
 	con_skip();
 	con_hex2("DTB", "at=", dtb, "magic=", dtb ? __builtin_bswap32(rd32(dtb)) : 0);
 	con_hex2("IMAGE", "lo=", mi.img_lo, "hi=", mi.img_hi);
