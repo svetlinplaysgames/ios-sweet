@@ -37,10 +37,10 @@ fi
 DTB_PATH="../dtb/bv5300plus_unpacked/dtb"
 DTB_ARG=""
 if [ -f "$DTB_PATH" ]; then
-	DTB_ARG="--dtb $DTB_PATH --dtb_offset 0x0f000000"
+	DTB_ARG="--dtb $DTB_PATH --dtb_offset 0x14000000"
 fi
 
-echo "[*] Packaging Android boot image for MediaTek LK fastboot..."
+echo "[*] Packaging Android boot image for MediaTek LK fastboot matching factory offsets..."
 mkbootimg \
 	--header_version 2 \
 	--kernel out_bv5300plus/Image \
@@ -48,12 +48,12 @@ mkbootimg \
 	$DTB_ARG \
 	--base 0x40000000 \
 	--kernel_offset 0x00080000 \
-	--ramdisk_offset 0x05000000 \
-	--tags_offset 0x04000000 \
+	--ramdisk_offset 0x15000000 \
+	--tags_offset 0x14000000 \
 	--pagesize 2048 \
 	--os_version 16.7.16 \
 	--os_patch_level 2026-10 \
-	--cmdline "serial=0x11002000,115200 console=tty0" \
+	--cmdline "serial=0x11002000,115200 console=tty0 bootopt=64S3,32N2,64N2" \
 	-o out_bv5300plus/shim-boot-bv5300plus.img
 
 echo "[+] Successfully generated: out_bv5300plus/shim-boot-bv5300plus.img"
