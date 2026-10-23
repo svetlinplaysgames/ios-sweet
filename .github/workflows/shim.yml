@@ -1,0 +1,34 @@
+name: Build BV5300 Plus Boot Shim
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, port-bv5300plus-mt8788]
+    paths:
+      - "shim/**"
+      - "dtb/**"
+      - ".github/workflows/shim.yml"
+
+jobs:
+  build-shim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM64 Cross-Compiler and mkbootimg
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu python3 python3-pip android-sdk-libsparse-utils
+          pip3 install --break-system-packages git+https://github.com/osm0sis/mkbootimg || sudo apt-get install -y mkbootimg || true
+
+      - name: Build Blackview BV5300 Plus Shim
+        run: |
+          chmod +x shim/build_bv5300plus.sh
+          CROSS_COMPILE=aarch64-linux-gnu- bash shim/build_bv5300plus.sh
+
+      - name: Upload BV5300 Plus Boot Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: shim-boot-bv5300plus
+          path: shim/out_bv5300plus/shim-boot-bv5300plus.img
+          if-no-files-found: error

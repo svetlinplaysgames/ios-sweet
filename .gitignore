@@ -1,10 +1,17 @@
 # device dumps: persist/modemst/fsg hold IMEI + calibration; live DT holds the serial
 backup/
-dtb/
+dtb/*
+!dtb/bv5300plus_unpacked/
+!dtb/bv5300plus_unpacked/dtb
+!dtb/bv5300plus_unpacked/header.txt
 recovery/
 # third-party/Apple sources fetched for reading
 research/
+# stock Android kernel and ramdisk blobs
+dtb/bv5300plus_unpacked/kernel
+dtb/bv5300plus_unpacked/ramdisk
 shim/out/
+shim/out_*/
 xnu/out/
 xnu/out-*/
 __pycache__/
