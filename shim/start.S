@@ -25,6 +25,25 @@ _head:
 	.text
 	.globl _start
 _start:
+	/* ---- Detect EL; drop EL2->EL1 if MediaTek ATF delivered us at EL2 ---- */
+	mrs	x1, CurrentEL
+	lsr	x1, x1, #2
+	cmp	x1, #2
+	b.ne	_in_el1
+
+	/* Running at EL2: set up EL1 as AArch64, then eret down */
+	mov	x1, #(1 << 31)		/* HCR_EL2.RW = 1 (EL1 is AArch64) */
+	msr	hcr_el2, x1
+	msr	sctlr_el1, xzr		/* reset value: MMU/D-cache off */
+	mov	x1, #0x3c5		/* SPSR_EL2: EL1h, DAIF all masked */
+	msr	spsr_el2, x1
+	adr	x1, _in_el1
+	msr	elr_el2, x1
+	/* x0 still holds DTB pointer */
+	isb
+	eret
+
+_in_el1:
 	msr	daifset, #0xf
 	mov	x19, x0			/* DTB pointer from bootloader */
 	msr	spsel, #1
@@ -48,6 +67,23 @@ _start:
 /* PSCI CPU_ON target. x0 = context id = cpu index (1..7). */
 	.globl secondary_entry
 secondary_entry:
+	/* Drop EL2->EL1 for secondary CPUs too */
+	mrs	x1, CurrentEL
+	lsr	x1, x1, #2
+	cmp	x1, #2
+	b.ne	_sec_in_el1
+
+	mov	x1, #(1 << 31)
+	msr	hcr_el2, x1
+	msr	sctlr_el1, xzr
+	mov	x1, #0x3c5
+	msr	spsr_el2, x1
+	adr	x1, _sec_in_el1
+	msr	elr_el2, x1
+	isb
+	eret
+
+_sec_in_el1:
 	msr	daifset, #0xf
 	msr	spsel, #1
 	adr	x1, _sec_stacks
