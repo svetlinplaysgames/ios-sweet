@@ -40,8 +40,13 @@ if [ -f "$DTB_PATH" ]; then
 	DTB_ARG="--dtb $DTB_PATH --dtb_offset 0x14000000"
 fi
 
+PACKER="python3 ../tools/pack_bootv2.py"
+if command -v mkbootimg &>/dev/null; then
+	PACKER="mkbootimg"
+fi
+
 echo "[*] Packaging Android boot image for MediaTek LK fastboot matching factory offsets..."
-mkbootimg \
+$PACKER \
 	--header_version 2 \
 	--kernel out_bv5300plus/Image \
 	--ramdisk out_bv5300plus/ramdisk.bin \

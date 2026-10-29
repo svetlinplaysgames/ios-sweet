@@ -7,6 +7,7 @@ on:
     paths:
       - "shim/**"
       - "dtb/**"
+      - "tools/pack_bootv2.py"
       - ".github/workflows/shim.yml"
 
 jobs:
@@ -15,11 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ARM64 Cross-Compiler and mkbootimg
+      - name: Install ARM64 Cross-Compiler and Build Tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu python3 python3-pip android-sdk-libsparse-utils
-          pip3 install --break-system-packages git+https://github.com/osm0sis/mkbootimg || sudo apt-get install -y mkbootimg || true
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu python3 cpio gzip
 
       - name: Build Blackview BV5300 Plus Shim
         run: |
