@@ -53,6 +53,7 @@
 #define wsr(r, v) __asm__ volatile("msr " r ", %0" : : "r"((uint64_t)(v)))
 
 extern char _head[], _end[];
+extern uintptr_t fb_phys;
 
 /* 1 L2 + up to 2 L3 tables, plus slack to align to 16K at runtime */
 static uint64_t pt_pool[4 * NENT] __attribute__((aligned(4096)));
@@ -90,7 +91,7 @@ int mmu_enable(struct mmu_info *info)
 	zero_table(l2);
 	for (uint64_t i = 0; i < (12UL << 30) >> BLK_SHIFT; i++)
 		l2[i] = (i << BLK_SHIFT) | DEV_FLAGS | D_BLOCK;
-	l2[FB_PHYS >> BLK_SHIFT] = (FB_PHYS & ~(BLK_SIZE - 1)) | NC_FLAGS | D_BLOCK;
+	l2[fb_phys >> BLK_SHIFT] = (fb_phys & ~(BLK_SIZE - 1)) | NC_FLAGS | D_BLOCK;
 
 	/* L3 for each block that holds part of the image */
 	for (uint64_t blk = img_lo >> BLK_SHIFT; blk <= (img_hi - 1) >> BLK_SHIFT; blk++) {

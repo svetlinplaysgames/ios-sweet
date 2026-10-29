@@ -4,6 +4,7 @@
  */
 #include "console.h"
 #include "font.h"
+#include "fdt.h"
 
 #ifndef CON_SCALE
 #define SCALE		3
@@ -16,7 +17,25 @@
 #define MARGIN		24
 #define LABEL_COLS	8
 
+uintptr_t fb_phys = FB_BASE;
 volatile uint32_t *con_fb = (volatile uint32_t *)FB_BASE;
+
+void con_init(uint64_t dtb)
+{
+#if defined(TARGET_BV5300PLUS) || defined(TARGET_MT8788)
+	uint64_t fb_l = 0, fb_h = 0;
+	if (fdt_chosen_u64(dtb, "atag,videolfb-fb_base_l", &fb_l)) {
+		fdt_chosen_u64(dtb, "atag,videolfb-fb_base_h", &fb_h);
+		fb_phys = (uintptr_t)((fb_h << 32) | fb_l);
+		con_fb = (volatile uint32_t *)fb_phys;
+	} else if (fdt_chosen_u64(dtb, "atag,videolfb-fb_base", &fb_l)) {
+		fb_phys = (uintptr_t)fb_l;
+		con_fb = (volatile uint32_t *)fb_phys;
+	}
+#else
+	(void)dtb;
+#endif
+}
 static uint32_t con_bg;
 static int row;
 

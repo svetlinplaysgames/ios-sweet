@@ -38,8 +38,14 @@ static uintptr_t skip_str(uintptr_t p)
 
 int fdt_chosen_u64(uintptr_t fdt, const char *prop, uint64_t *out)
 {
-	if (!fdt || be32(fdt) != FDT_MAGIC)
+	if (!fdt)
 		return 0;
+	if (be32(fdt) != FDT_MAGIC) {
+		if (be32(fdt + 64) == FDT_MAGIC)
+			fdt += 64;
+		else
+			return 0;
+	}
 	uintptr_t p = fdt + be32(fdt + 8);		/* off_dt_struct */
 	uintptr_t strings = fdt + be32(fdt + 12);	/* off_dt_strings */
 	int depth = 0, in_chosen = 0;

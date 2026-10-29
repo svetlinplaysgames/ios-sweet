@@ -8,7 +8,9 @@
 #define YELLOW	0xffffff00U
 #define GREEN	0xff00ff00U
 
+extern uintptr_t fb_phys;
 extern volatile uint32_t *con_fb;
+void con_init(uint64_t dtb);
 
 void con_clear(uint32_t bg);
 void con_skip(void);

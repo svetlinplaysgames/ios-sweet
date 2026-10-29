@@ -386,6 +386,8 @@ void shim_main(uint64_t dtb)
 {
 	struct mmu_info mi;
 
+	con_init(dtb);
+
 	/* An xnu payload in the ramdisk means: boot it (MMU stays off). */
 	stage = "loader";
 	con_clear(RED);
@@ -436,7 +438,7 @@ void shim_main(uint64_t dtb)
 	con_hex2("PARANGE", "mmfr0=", rsr("id_aa64mmfr0_el1") & 0xf, "tg16=", (rsr("id_aa64mmfr0_el1") >> 20) & 0xf);
 	con_skip();
 	con_hex("PAR img", mmu_probe((uintptr_t)shim_main));
-	con_hex("PAR fb", mmu_probe(FB_PHYS + 0x1000));
+	con_hex("PAR fb", mmu_probe(fb_phys + 0x1000));
 	con_hex("PAR gic", mmu_probe(GICD_BASE));
 	con_hex("PAR 12G", mmu_probe(0x300000000UL));
 	con_skip();
@@ -450,5 +452,7 @@ void shim_main(uint64_t dtb)
 	test_gic();
 
 	stage = "done";
-	reset(40);
+	con_str("STATUS", "diagnostic complete - idle");
+	for (;;)
+		__asm__ volatile("wfe");
 }
