@@ -386,6 +386,12 @@ void shim_main(uint64_t dtb)
 {
 	struct mmu_info mi;
 
+#if defined(MTK_WDT_BASE)
+	/* Disable MediaTek AP hardware watchdog immediately */
+	wr32(MTK_WDT_RESTART, MTK_WDT_RESTART_KEY);
+	wr32(MTK_WDT_MODE, MTK_WDT_MODE_KEY);
+#endif
+
 	con_init(dtb);
 
 	/* An xnu payload in the ramdisk means: boot it (MMU stays off). */

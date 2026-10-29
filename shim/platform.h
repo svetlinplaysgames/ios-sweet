@@ -45,6 +45,8 @@
 #define MTK_WDT_MODE            (MTK_WDT_BASE + 0x00)
 #define MTK_WDT_RESTART         (MTK_WDT_BASE + 0x08)
 #define MTK_WDT_SWRST           (MTK_WDT_BASE + 0x14)
+#define MTK_WDT_MODE_KEY        0x22000000UL
+#define MTK_WDT_RESTART_KEY     0x1971UL
 #define MTK_WDT_SWRST_KEY       0x1209
 
 /* Storage (eMMC 5.1 Host MSDC0) */
