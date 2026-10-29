@@ -27,6 +27,9 @@ $OBJCOPY -O binary out_bv5300plus/shim.elf out_bv5300plus/Image
 size=$(${CROSS_COMPILE:-aarch64-linux-gnu-}nm out_bv5300plus/shim.elf | awk '$3=="_end"{print strtonum("0x"$1)}')
 truncate -s "$size" out_bv5300plus/Image
 
+# Compress Image with gzip: MediaTek LK expects gzip-compressed Image.gz
+gzip -9 -n -f -k out_bv5300plus/Image
+
 # Ramdisk packaging
 if [ -n "${1:-}" ]; then
 	cp "$1" out_bv5300plus/ramdisk.bin
@@ -45,10 +48,10 @@ if command -v mkbootimg &>/dev/null; then
 	PACKER="mkbootimg"
 fi
 
-echo "[*] Packaging Android boot image for MediaTek LK fastboot matching factory offsets..."
+echo "[*] Packaging Android boot image with Image.gz for MediaTek LK fastboot..."
 $PACKER \
 	--header_version 2 \
-	--kernel out_bv5300plus/Image \
+	--kernel out_bv5300plus/Image.gz \
 	--ramdisk out_bv5300plus/ramdisk.bin \
 	$DTB_ARG \
 	--base 0x40000000 \
